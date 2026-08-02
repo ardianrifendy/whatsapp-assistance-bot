@@ -4,6 +4,7 @@ import { OWNER_GROUP_BYPASS_COMMAND } from './ownerGuard.js';
 import { findActiveGroupByWhatsappId } from './groupGuard.js';
 import { findActiveUserByNumber } from './userGuard.js';
 import { findActiveMembership } from './roleGuard.js';
+import { logger } from '../shared/logger.js';
 
 const GROUP_NOT_REGISTERED_REASON = 'Grup ini belum terdaftar. Hubungi Owner untuk mendaftarkan grup.';
 const USER_NOT_REGISTERED_REASON = 'Nomor Anda belum terdaftar. Hubungi Admin atau Owner untuk didaftarkan.';
@@ -49,6 +50,10 @@ export function createAccessResolver(
 
       const user = await findActiveUserByNumber(pool, msg.senderNumber);
       if (!user) {
+        logger.warn(
+          { senderJid: msg.senderJid, senderNumber: msg.senderNumber },
+          'access denied: no active bot_users row for this number',
+        );
         return { granted: false, reason: USER_NOT_REGISTERED_REASON };
       }
       if (!user.isOwner) {
@@ -62,6 +67,10 @@ export function createAccessResolver(
 
     const user = await findActiveUserByNumber(pool, msg.senderNumber);
     if (!user) {
+      logger.warn(
+        { senderJid: msg.senderJid, senderNumber: msg.senderNumber },
+        'access denied: no active bot_users row for this number',
+      );
       return { granted: false, reason: USER_NOT_REGISTERED_REASON };
     }
 
