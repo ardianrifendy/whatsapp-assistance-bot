@@ -22,7 +22,7 @@ registerCommand({
   requiresPreviewConfirm: false,
   handler: async (ctx) => {
     if (!ctx.sessionId) {
-      return { text: 'Tidak ada konfirmasi yang aktif untuk Anda.' };
+      return { text: '🤔 Tidak ada konfirmasi yang aktif untuk Anda. Coba jalankan lagi perintah transaksinya.' };
     }
 
     const session = await sessionService.getSession(ctx.sessionId);
@@ -33,7 +33,7 @@ registerCommand({
       session.expiresAt.getTime() <= Date.now() ||
       session.userId !== ctx.userId
     ) {
-      return { text: 'Konfirmasi sudah tidak berlaku. Silakan ulangi perintah transaksi.' };
+      return { text: '⏱️ Konfirmasi ini sudah kedaluwarsa. Silakan ulangi perintah transaksinya.' };
     }
 
     // The generic "!ya" confirmation is shared across domains: stock
@@ -52,7 +52,7 @@ registerCommand({
     }
 
     if (!isStockMutationPayload(session.payload)) {
-      return { text: 'Konfirmasi tidak valid. Silakan ulangi perintah transaksi.' };
+      return { text: '⚠️ Konfirmasi tidak valid. Silakan ulangi perintah transaksinya.' };
     }
     const payload = session.payload;
 
@@ -99,6 +99,6 @@ registerCommand({
 
     await sessionService.completeSession(ctx.sessionId);
 
-    return { text: `*Transaksi berhasil*\n${summaryLines.join('\n')}` };
+    return { text: `✅ *Transaksi berhasil!*\n${summaryLines.join('\n')}` };
   },
 });

@@ -37,7 +37,7 @@ export interface StockMutationPayload {
 }
 
 const CONFIRM_FOOTER =
-  '\n\nBalas pesan ini dengan reply lalu ketik !ya untuk konfirmasi atau !cancel untuk batal.';
+  '\n\n👉 Balas (quote) pesan ini lalu ketik !ya untuk konfirmasi, atau !cancel untuk batal.';
 
 function movementLabel(type: MovementType): string {
   switch (type) {
@@ -59,7 +59,7 @@ function movementLabel(type: MovementType): string {
 }
 
 export function formatStockMutationPreview(payload: StockMutationPayload): string {
-  const lines: string[] = [`*Preview ${movementLabel(payload.movementType)}*`];
+  const lines: string[] = [`📝 *Pratinjau ${movementLabel(payload.movementType)}*`];
   if (payload.reference) lines.push(`Referensi: ${payload.reference}`);
   if (payload.reason) lines.push(`Alasan: ${payload.reason}`);
   lines.push('');

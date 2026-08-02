@@ -56,7 +56,9 @@ describe('resolveAssetPath / renderMenuText', () => {
     expect(text).toContain('!back');
     expect(text).toContain('!cancel');
     for (const opt of content.options) {
-      expect(text).toContain(`!${opt.digit} - ${opt.label}`);
+      expect(text).toContain(`!${opt.digit}`);
+      expect(text).toContain(opt.label);
+      expect(text).toContain(opt.hint);
     }
   });
 });
