@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   const sessionService = createSessionService(pool);
   startExpirySweep(sessionService);
 
-  const { client, initialize } = createWhatsAppClient();
+  const { client, initialize, destroy } = createWhatsAppClient();
   registerQrHandler(client);
   registerLifecycleHandlers(client);
   client.on('ready', () => {
@@ -70,6 +70,26 @@ async function main(): Promise<void> {
   server.listen(env.HEALTHCHECK_PORT, () => {
     logger.info({ port: env.HEALTHCHECK_PORT }, 'health server listening');
   });
+
+  // Close the browser cleanly on container stop so Chromium removes its own
+  // SingletonLock file — the startup-time cleanup in client.ts is the
+  // guaranteed fallback if this doesn't get to run (SIGKILL, OOM), but a
+  // clean shutdown avoids relying on that fallback at every restart.
+  let shuttingDown = false;
+  async function shutdown(signal: string): Promise<void> {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ signal }, 'shutting down');
+    try {
+      await destroy();
+    } catch (err) {
+      logger.error({ err }, 'error while closing whatsapp client');
+    }
+    await pool.end().catch((err: unknown) => logger.error({ err }, 'error while closing db pool'));
+    process.exit(0);
+  }
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
 main().catch((err) => {
