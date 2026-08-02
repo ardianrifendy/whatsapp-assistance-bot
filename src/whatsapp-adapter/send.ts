@@ -109,10 +109,21 @@ export function createSendResponse(
       sent = await client.sendMessage(msg.chatId, result.text, options);
     }
 
-    if (!sent?.id?._serialized) {
-      throw new Error('client.sendMessage() did not return a sent message with an id');
+    // As with incoming messages (see normalizeIncoming.ts), whatsapp-web.js
+    // sometimes resolves sendMessage() without a proper Message wrapper
+    // (missing/empty id) even though the message itself was actually
+    // delivered — the send call completing is what matters to the user, so
+    // this must degrade to a synthetic id (only used internally to anchor a
+    // pending confirmation session) rather than report the command as
+    // failed for a reply that likely already reached the chat.
+    let sentMessageId = sent?.id?._serialized;
+    if (!sentMessageId) {
+      sentMessageId = `synthetic-sent:${msg.chatId}:${Date.now()}`;
+      logger.warn(
+        { chatId: msg.chatId, command: msg.command, sentMessageId },
+        'sendMessage() returned no message id; message was likely still delivered, using a synthetic id',
+      );
     }
-    const sentMessageId = sent.id._serialized;
 
     if (result.clearAction) {
       await applyClearAction(client, msg, result.clearAction);
