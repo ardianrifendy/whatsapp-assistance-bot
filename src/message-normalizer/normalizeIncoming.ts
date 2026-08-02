@@ -56,6 +56,25 @@ function resolveMessageId(message: Message): string {
 }
 
 /**
+ * Message.getQuotedMessage() drives a puppeteer page.evaluate() call that
+ * can throw an opaque internal error ("r: r") on this WhatsApp Web version
+ * — the same family of scraping-layer instability as the message.id
+ * issues above. A quoted-reply that can't be resolved should fall back to
+ * "not a reply" (quotedMessageId: null) rather than crash the entire
+ * incoming-message pipeline; session/menu commands relying on the quote
+ * simply won't resolve a session that turn, which is a safe degradation.
+ */
+async function resolveQuotedMessageId(message: Message): Promise<string | null> {
+  try {
+    const quoted = await message.getQuotedMessage();
+    return quoted?.id?._serialized ?? null;
+  } catch (err) {
+    logger.warn({ err, chatId: message.from }, 'getQuotedMessage() failed, treating message as not a reply');
+    return null;
+  }
+}
+
+/**
  * Glue function: takes a raw whatsapp-web.js `Message` (already filtered by
  * events.ts to be a group message starting with "!") and produces the
  * `NormalizedIncomingMessage` shape the command-router pipeline expects.
@@ -67,9 +86,7 @@ export async function normalizeIncoming(
   const whatsappGroupId = message.from.endsWith('@g.us') ? message.from : null;
   const senderJid = await resolveSenderJid(client, message.author ?? message.from);
 
-  const quotedMessageId = message.hasQuotedMsg
-    ? ((await message.getQuotedMessage())?.id?._serialized ?? null)
-    : null;
+  const quotedMessageId = message.hasQuotedMsg ? await resolveQuotedMessageId(message) : null;
 
   const { command, args, batchLines } = tokenizeCommand(message.body);
 
