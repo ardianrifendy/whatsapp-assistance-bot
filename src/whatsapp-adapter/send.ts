@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { Client, Message, MessageSendOptions } from 'whatsapp-web.js';
+import type { Chat, Client, Message, MessageSendOptions } from 'whatsapp-web.js';
 // See client.ts for why this must be a default import + destructure
 // rather than a named import (whatsapp-web.js is CommonJS).
 import pkg from 'whatsapp-web.js';
@@ -29,6 +29,27 @@ function buildReplyOptions(msg: NormalizedIncomingMessage): MessageSendOptions {
 }
 
 /**
+ * client.getChatById() drives WhatsApp Web's internal `getChat(chatId)`
+ * (singular) helper, which has been observed to fail outright in this
+ * environment — client.getChats() (plural, listing every chat) exercises a
+ * different internal code path and works, so fall back to fetching the
+ * full list and filtering by ID when the direct lookup fails.
+ */
+async function getChatByIdWithFallback(client: Client, chatId: string): Promise<Chat> {
+  try {
+    const chat = await client.getChatById(chatId);
+    if (chat) return chat;
+  } catch (err) {
+    logger.warn({ err, chatId }, 'getChatById failed, falling back to getChats()');
+  }
+
+  const chats = await client.getChats();
+  const chat = chats.find((c) => c.id._serialized === chatId);
+  if (!chat) throw new Error(`Chat not found for id ${chatId}, even via getChats() fallback`);
+  return chat;
+}
+
+/**
  * Executes the actual WhatsApp-side deletion requested by
  * chat-moderation-service (src/chat-moderation-service) via
  * CommandResult.clearAction — the only layer with a live Chat/Message
@@ -43,9 +64,7 @@ async function applyClearAction(
   action: ClearAction,
 ): Promise<void> {
   try {
-    logger.info({ chatId: msg.chatId, action }, 'clearAction: calling getChatById');
-    const chat = await client.getChatById(msg.chatId);
-    logger.info({ chatId: msg.chatId }, 'clearAction: getChatById ok');
+    const chat = await getChatByIdWithFallback(client, msg.chatId);
 
     if (action.scope === 'all') {
       try {
