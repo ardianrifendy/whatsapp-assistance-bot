@@ -9,6 +9,24 @@ import { logger } from '../shared/logger.js';
 
 type ClearAction = NonNullable<CommandResult['clearAction']>;
 
+// A genuine WhatsApp serialized message ID looks like
+// "false_120363xxxxx@g.us_3EB0xxxxxxxxxxxx". message-normalizer falls back
+// to a non-serialized raw id (or a synthetic one) when the real one is
+// missing (see normalizeIncoming.ts's resolveMessageId) — that fallback is
+// fine for our own idempotency key, but whatsapp-web.js's sendMessage()
+// silently fails (resolves undefined instead of throwing) when handed an
+// invalid quotedMessageId. Only pass it through when it matches the real
+// shape; otherwise send a plain new message rather than crash the command.
+const SERIALIZED_MESSAGE_ID_PATTERN = /^(true|false)_[^_]+_.+$/;
+
+function buildReplyOptions(msg: NormalizedIncomingMessage): MessageSendOptions {
+  if (SERIALIZED_MESSAGE_ID_PATTERN.test(msg.messageId)) {
+    return { quotedMessageId: msg.messageId };
+  }
+  logger.debug({ messageId: msg.messageId }, 'messageId is not a real serialized id, sending without a quote');
+  return {};
+}
+
 /**
  * Executes the actual WhatsApp-side deletion requested by
  * chat-moderation-service (src/chat-moderation-service) via
@@ -69,20 +87,20 @@ export function createSendResponse(
   client: Client,
 ): (msg: NormalizedIncomingMessage, result: CommandResult) => Promise<{ sentMessageId: string }> {
   return async (msg, result) => {
-    const options: MessageSendOptions = { quotedMessageId: msg.messageId };
+    const options = buildReplyOptions(msg);
 
-    let sentMessageId: string;
+    let sent;
     if (result.imagePath) {
       const media = MessageMedia.fromFilePath(result.imagePath);
-      const sent = await client.sendMessage(msg.chatId, media, {
-        ...options,
-        caption: result.text,
-      });
-      sentMessageId = sent.id._serialized;
+      sent = await client.sendMessage(msg.chatId, media, { ...options, caption: result.text });
     } else {
-      const sent = await client.sendMessage(msg.chatId, result.text, options);
-      sentMessageId = sent.id._serialized;
+      sent = await client.sendMessage(msg.chatId, result.text, options);
     }
+
+    if (!sent?.id?._serialized) {
+      throw new Error('client.sendMessage() did not return a sent message with an id');
+    }
+    const sentMessageId = sent.id._serialized;
 
     if (result.clearAction) {
       await applyClearAction(client, msg, result.clearAction);
@@ -96,7 +114,6 @@ export function createSendError(
   client: Client,
 ): (msg: NormalizedIncomingMessage, text: string) => Promise<void> {
   return async (msg, text) => {
-    const options: MessageSendOptions = { quotedMessageId: msg.messageId };
-    await client.sendMessage(msg.chatId, text, options);
+    await client.sendMessage(msg.chatId, text, buildReplyOptions(msg));
   };
 }
