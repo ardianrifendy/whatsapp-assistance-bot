@@ -46,22 +46,37 @@ async function applyClearAction(
     const chat = await client.getChatById(msg.chatId);
 
     if (action.scope === 'all') {
-      await chat.clearMessages();
-      return;
+      try {
+        await chat.clearMessages();
+        return;
+      } catch (err) {
+        // Observed to fail with an internal WhatsApp Web scraping-layer
+        // error in this environment (same family as the message-id
+        // quirks elsewhere in this codebase). Fall through to the
+        // per-message delete path below instead of silently doing
+        // nothing — it's slower but uses the primitive that has
+        // actually worked for the other clear scopes.
+        logger.warn(
+          { err, chatId: msg.chatId },
+          'chat.clearMessages() failed, falling back to per-message delete',
+        );
+      }
     }
 
-    const limit = action.scope === 'recent' ? (action.limit ?? 20) : 200;
+    const limit = action.scope === 'recent' ? (action.limit ?? 20) : 1000;
     const messages = await chat.fetchMessages({ limit });
 
     const toDelete = messages.filter((m: Message) => {
       if (action.scope === 'bot') return m.fromMe;
       if (action.scope === 'saya') return m.author === action.targetSenderJid || m.from === action.targetSenderJid;
-      return true; // 'recent': any author, most-recent `limit` messages
+      return true; // 'recent' and the 'all' fallback: every fetched message
     });
 
+    let deletedCount = 0;
     for (const message of toDelete) {
       try {
         await message.delete(true);
+        deletedCount += 1;
       } catch (err) {
         logger.debug(
           { err, messageId: message.id?._serialized },
@@ -69,6 +84,10 @@ async function applyClearAction(
         );
       }
     }
+    logger.info(
+      { chatId: msg.chatId, action, attempted: toDelete.length, deletedCount },
+      'clearAction per-message delete finished',
+    );
   } catch (err) {
     logger.error({ err, chatId: msg.chatId, action }, 'failed to execute clearAction');
   }
