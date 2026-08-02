@@ -95,16 +95,12 @@ migrations/, src/persistence/migrate.ts.
   endpoint `/health` bot (lihat HEALTHCHECK_PORT di .env) agar Owner
   mendapat notifikasi jika bot down.
 
-9. ASET GAMBAR BANTUAN (WAJIB sebelum Fase 5 terlihat sempurna oleh User)
+9. ASET GAMBAR BANTUAN (opsional, sudah ada placeholder)
 ------------------------------------------------------------------------
-Folder `assets/help/` sudah dibuat tapi masih kosong. Siapkan 7 file PNG
-berikut (desain visual, bukan kode, jadi dibuat manusia/desainer):
-    assets/help/help-main.png
-    assets/help/help-stock.png
-    assets/help/help-transaction.png
-    assets/help/help-in-transit.png
-    assets/help/help-history.png
-    assets/help/help-admin.png
-    assets/help/help-confirmation.png
-Tanpa file ini, command `!help` tetap berfungsi (teks menu tetap terkirim)
-tapi tanpa gambar panduan visual.
+`assets/help/` sudah berisi 7 file PNG placeholder (judul teks polos,
+bukan desain final) untuk help-main/stock/transaction/in-transit/
+history/admin/confirmation. Bot sudah bisa mengirim gambar sekarang.
+Kalau nanti ada desain visual asli dari desainer, tinggal timpa file
+PNG di folder itu dengan nama yang sama — tidak perlu ubah kode apa
+pun, `docker compose up -d` cukup untuk memuat file baru (volume
+bind mount `./assets/help`).
