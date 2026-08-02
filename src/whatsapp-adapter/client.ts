@@ -1,8 +1,17 @@
-import { Client, LocalAuth } from 'whatsapp-web.js';
+// whatsapp-web.js is CommonJS; Node's ESM loader cannot statically detect
+// its named exports (they're assigned via `require()` inside an object
+// literal, which cjs-module-lexer can't analyze), so we must import the
+// default export and destructure at runtime. Type-only usages elsewhere
+// in this file still import the type named export directly since those
+// are erased at compile time and never hit this restriction.
+import pkg from 'whatsapp-web.js';
+import type { Client as WAClient } from 'whatsapp-web.js';
 import { env } from '../config/env.js';
 
+const { Client, LocalAuth } = pkg;
+
 export interface WhatsAppClientHandle {
-  client: Client;
+  client: WAClient;
   /** Starts the puppeteer session and begins the auth/QR flow. */
   initialize: () => Promise<void>;
   /** Gracefully closes the browser session. */

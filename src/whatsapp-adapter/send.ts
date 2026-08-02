@@ -1,5 +1,8 @@
 import type { Client, Message, MessageSendOptions } from 'whatsapp-web.js';
-import { MessageMedia } from 'whatsapp-web.js';
+// See client.ts for why this must be a default import + destructure
+// rather than a named import (whatsapp-web.js is CommonJS).
+import pkg from 'whatsapp-web.js';
+const { MessageMedia } = pkg;
 import type { NormalizedIncomingMessage } from '../command-router/dispatch.js';
 import type { CommandResult } from '../types/command.js';
 import { logger } from '../shared/logger.js';
