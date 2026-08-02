@@ -1,8 +1,31 @@
-import type { Message } from 'whatsapp-web.js';
+import type { Client, Message } from 'whatsapp-web.js';
 import type { NormalizedIncomingMessage } from '../command-router/dispatch.js';
 import { normalizeWhatsAppNumber } from './normalizeNumber.js';
 import { tokenizeCommand } from './tokenizeCommand.js';
 import { logger } from '../shared/logger.js';
+
+/**
+ * WhatsApp's privacy layer ("LID" / Linked ID) can report a group
+ * participant's identity as an opaque `<id>@lid` instead of their real
+ * `<number>@c.us`, so `bot_users.whatsapp_number` lookups fail even for a
+ * genuinely registered number. Resolve it via the client's own
+ * getContactLidAndPhone() before normalizing. Falls back to the raw LID
+ * (which normalizeWhatsAppNumber will still turn into a digit string, just
+ * one that will never match a real registered number) if resolution fails
+ * — logged so the mismatch is diagnosable rather than silent.
+ */
+async function resolveSenderJid(client: Client, jid: string): Promise<string> {
+  if (!jid.endsWith('@lid')) return jid;
+
+  try {
+    const [result] = await client.getContactLidAndPhone([jid]);
+    if (result?.pn) return result.pn;
+    logger.warn({ jid }, 'getContactLidAndPhone returned no phone number for this @lid sender');
+  } catch (err) {
+    logger.warn({ err, jid }, 'failed to resolve @lid sender to a phone number');
+  }
+  return jid;
+}
 
 /**
  * whatsapp-web.js occasionally hands back a Message whose `id._serialized`
@@ -37,9 +60,12 @@ function resolveMessageId(message: Message): string {
  * events.ts to be a group message starting with "!") and produces the
  * `NormalizedIncomingMessage` shape the command-router pipeline expects.
  */
-export async function normalizeIncoming(message: Message): Promise<NormalizedIncomingMessage> {
+export async function normalizeIncoming(
+  message: Message,
+  client: Client,
+): Promise<NormalizedIncomingMessage> {
   const whatsappGroupId = message.from.endsWith('@g.us') ? message.from : null;
-  const senderJid = message.author ?? message.from;
+  const senderJid = await resolveSenderJid(client, message.author ?? message.from);
 
   const quotedMessageId = message.hasQuotedMsg
     ? ((await message.getQuotedMessage())?.id?._serialized ?? null)

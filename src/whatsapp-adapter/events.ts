@@ -24,11 +24,15 @@ export type IncomingMessageHandler = (msg: NormalizedIncomingMessage) => Promise
 const BARE_DIGIT = /^[0-9]$/;
 export function registerMessageHandler(client: Client, handler: IncomingMessageHandler): void {
   client.on('message_create', (message: Message) => {
-    void handleMessageCreate(message, handler);
+    void handleMessageCreate(message, client, handler);
   });
 }
 
-async function handleMessageCreate(message: Message, handler: IncomingMessageHandler): Promise<void> {
+async function handleMessageCreate(
+  message: Message,
+  client: Client,
+  handler: IncomingMessageHandler,
+): Promise<void> {
   try {
     if (message.fromMe) {
       logger.debug({ messageId: message.id?._serialized }, 'ignoring message sent by the bot itself');
@@ -45,7 +49,7 @@ async function handleMessageCreate(message: Message, handler: IncomingMessageHan
       return;
     }
 
-    const normalized = await normalizeIncoming(message);
+    const normalized = await normalizeIncoming(message, client);
     await handler(normalized);
   } catch (err) {
     logger.error({ err, messageId: message.id?._serialized }, 'failed to process incoming message');
