@@ -6,3 +6,8 @@ dist/
 *.log
 coverage/
 .DS_Store
+
+# Accidental root-level screenshots (never track these)
+/*.png
+/*.jpg
+/*.jpeg
