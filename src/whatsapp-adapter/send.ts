@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { Client, Message, MessageSendOptions } from 'whatsapp-web.js';
 // See client.ts for why this must be a default import + destructure
 // rather than a named import (whatsapp-web.js is CommonJS).
@@ -89,11 +90,22 @@ export function createSendResponse(
   return async (msg, result) => {
     const options = buildReplyOptions(msg);
 
+    // Help images (assets/help/*.png) are static files a human must supply
+    // separately (see instruksi.txt) — until they exist, degrade to a
+    // text-only reply instead of failing the whole command.
     let sent;
-    if (result.imagePath) {
-      const media = MessageMedia.fromFilePath(result.imagePath);
-      sent = await client.sendMessage(msg.chatId, media, { ...options, caption: result.text });
+    if (result.imagePath && fs.existsSync(result.imagePath)) {
+      try {
+        const media = MessageMedia.fromFilePath(result.imagePath);
+        sent = await client.sendMessage(msg.chatId, media, { ...options, caption: result.text });
+      } catch (err) {
+        logger.warn({ err, imagePath: result.imagePath }, 'failed to attach image, sending text only');
+        sent = await client.sendMessage(msg.chatId, result.text, options);
+      }
     } else {
+      if (result.imagePath) {
+        logger.warn({ imagePath: result.imagePath }, 'help image not found, sending text only');
+      }
       sent = await client.sendMessage(msg.chatId, result.text, options);
     }
 
