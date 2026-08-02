@@ -42,6 +42,16 @@ export interface SessionService {
     userId: string,
     groupId: string,
   ): Promise<ConversationSession | null>;
+  /**
+   * Fallback for when quote-reply resolution is unavailable or fails
+   * (observed WhatsApp Web / whatsapp-web.js quoting instability — see
+   * resolveSessionId.ts): the most recent active, non-expired session for
+   * this exact user+group, regardless of anchor. Safe because it's only
+   * ever consulted by session-dependent commands (!ya, !cancel, digit
+   * menu selection) that are meaningless without an active session
+   * anyway, and a user only ever has one meaningfully "current" session.
+   */
+  getActiveSessionForUser(userId: string, groupId: string): Promise<ConversationSession | null>;
   completeSession(sessionId: string): Promise<void>;
   cancelSession(sessionId: string): Promise<void>;
   /**

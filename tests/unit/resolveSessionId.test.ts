@@ -27,42 +27,69 @@ const grantedAccess: AccessResolution = {
   warehouseId: 'warehouse-uuid-1',
 };
 
+function fakeSessionService(overrides: Partial<SessionService> = {}): SessionService {
+  return {
+    resolveByQuotedReply: vi.fn(async () => null),
+    getActiveSessionForUser: vi.fn(async () => null),
+    ...overrides,
+  } as unknown as SessionService;
+}
+
 describe('createSessionResolver', () => {
-  it('returns null when the message is not a quoted reply', async () => {
-    const resolveByQuotedReply = vi.fn();
-    const resolver = createSessionResolver({ resolveByQuotedReply } as unknown as SessionService);
-
-    const result = await resolver(baseMessage({ quotedMessageId: null }), grantedAccess);
-
-    expect(result).toBeNull();
-    expect(resolveByQuotedReply).not.toHaveBeenCalled();
-  });
-
   it('returns null when access was not granted, even if quoting a message', async () => {
-    const resolveByQuotedReply = vi.fn();
-    const resolver = createSessionResolver({ resolveByQuotedReply } as unknown as SessionService);
+    const sessionService = fakeSessionService();
+    const resolver = createSessionResolver(sessionService);
 
     const result = await resolver(baseMessage({ quotedMessageId: 'anchor-1' }), { granted: false });
 
     expect(result).toBeNull();
-    expect(resolveByQuotedReply).not.toHaveBeenCalled();
+    expect(sessionService.resolveByQuotedReply).not.toHaveBeenCalled();
+    expect(sessionService.getActiveSessionForUser).not.toHaveBeenCalled();
   });
 
   it('resolves the session id via resolveByQuotedReply scoped to the granted user and group', async () => {
     const resolveByQuotedReply = vi.fn(async () => ({ id: 'session-42' }));
-    const resolver = createSessionResolver({ resolveByQuotedReply } as unknown as SessionService);
+    const sessionService = fakeSessionService({ resolveByQuotedReply } as unknown as Partial<SessionService>);
+    const resolver = createSessionResolver(sessionService);
 
     const result = await resolver(baseMessage({ quotedMessageId: 'anchor-1' }), grantedAccess);
 
     expect(resolveByQuotedReply).toHaveBeenCalledWith('anchor-1', 'user-1', 'group-uuid-1');
     expect(result).toBe('session-42');
+    expect(sessionService.getActiveSessionForUser).not.toHaveBeenCalled();
   });
 
-  it('returns null when no active session matches the quoted reply', async () => {
-    const resolveByQuotedReply = vi.fn(async () => null);
-    const resolver = createSessionResolver({ resolveByQuotedReply } as unknown as SessionService);
+  it('falls back to getActiveSessionForUser when there is no quoted reply at all', async () => {
+    const getActiveSessionForUser = vi.fn(async () => ({ id: 'session-fallback' }));
+    const sessionService = fakeSessionService({ getActiveSessionForUser } as unknown as Partial<SessionService>);
+    const resolver = createSessionResolver(sessionService);
+
+    const result = await resolver(baseMessage({ quotedMessageId: null }), grantedAccess);
+
+    expect(sessionService.resolveByQuotedReply).not.toHaveBeenCalled();
+    expect(getActiveSessionForUser).toHaveBeenCalledWith('user-1', 'group-uuid-1');
+    expect(result).toBe('session-fallback');
+  });
+
+  it('falls back to getActiveSessionForUser when the quoted reply does not resolve', async () => {
+    const getActiveSessionForUser = vi.fn(async () => ({ id: 'session-fallback' }));
+    const sessionService = fakeSessionService({
+      resolveByQuotedReply: vi.fn(async () => null),
+      getActiveSessionForUser,
+    } as unknown as Partial<SessionService>);
+    const resolver = createSessionResolver(sessionService);
 
     const result = await resolver(baseMessage({ quotedMessageId: 'anchor-1' }), grantedAccess);
+
+    expect(getActiveSessionForUser).toHaveBeenCalledWith('user-1', 'group-uuid-1');
+    expect(result).toBe('session-fallback');
+  });
+
+  it('returns null when neither the quoted reply nor the fallback find an active session', async () => {
+    const sessionService = fakeSessionService();
+    const resolver = createSessionResolver(sessionService);
+
+    const result = await resolver(baseMessage({ quotedMessageId: null }), grantedAccess);
 
     expect(result).toBeNull();
   });

@@ -56,6 +56,23 @@ function resolveMessageId(message: Message): string {
 }
 
 /**
+ * Message.getQuotedMessage() internally calls
+ * `pupPage.evaluate(fn, this.id._serialized)` to look ITSELF up in
+ * WhatsApp Web's internal message store before it can read that message's
+ * quoted-message reference — so when `_serialized` is empty (the same
+ * quirk resolveMessageId works around above), the evaluate call receives
+ * `undefined` and throws inside the page context. Reconstruct the
+ * standard WhatsApp message-key format (`${fromMe}_${remoteJid}_${id}`)
+ * from the parts we do have before calling it, since that's the shape
+ * `_serialized` normally takes.
+ */
+function reconstructSerializedId(message: Message): string | undefined {
+  const raw = (message.id as { id?: string } | undefined)?.id;
+  if (!raw) return undefined;
+  return `${message.fromMe}_${message.from}_${raw}`;
+}
+
+/**
  * Message.getQuotedMessage() drives a puppeteer page.evaluate() call that
  * can throw an opaque internal error ("r: r") on this WhatsApp Web version
  * — the same family of scraping-layer instability as the message.id
@@ -65,6 +82,14 @@ function resolveMessageId(message: Message): string {
  * simply won't resolve a session that turn, which is a safe degradation.
  */
 async function resolveQuotedMessageId(message: Message): Promise<string | null> {
+  if (!message.id?._serialized) {
+    const reconstructed = reconstructSerializedId(message);
+    if (reconstructed) {
+      (message.id as { _serialized?: string })._serialized = reconstructed;
+      logger.debug({ reconstructed }, 'reconstructed message.id._serialized before getQuotedMessage()');
+    }
+  }
+
   try {
     const quoted = await message.getQuotedMessage();
     return quoted?.id?._serialized ?? null;

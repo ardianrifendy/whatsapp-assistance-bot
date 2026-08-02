@@ -130,6 +130,19 @@ export function createSessionService(pool: Pool): SessionService {
       return row ? toSession(row) : null;
     },
 
+    async getActiveSessionForUser(userId: string, groupId: string) {
+      const result = await pool.query<SessionRow>(
+        `SELECT * FROM conversation_sessions
+         WHERE user_id = $1 AND group_id = $2
+           AND status = 'active' AND expires_at > now()
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [userId, groupId],
+      );
+      const row = result.rows[0];
+      return row ? toSession(row) : null;
+    },
+
     async completeSession(sessionId: string) {
       await pool.query(
         `UPDATE conversation_sessions SET status = 'completed' WHERE id = $1 AND status = 'active'`,

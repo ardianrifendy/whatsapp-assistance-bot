@@ -7,6 +7,7 @@ function fakeService(sweepExpired: () => Promise<number>): SessionService {
     createConfirmation: vi.fn(),
     getSession: vi.fn(),
     resolveByQuotedReply: vi.fn(),
+    getActiveSessionForUser: vi.fn(),
     completeSession: vi.fn(),
     cancelSession: vi.fn(),
     attachAnchor: vi.fn(),
