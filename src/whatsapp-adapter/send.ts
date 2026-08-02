@@ -1,0 +1,99 @@
+import type { Client, Message, MessageSendOptions } from 'whatsapp-web.js';
+import { MessageMedia } from 'whatsapp-web.js';
+import type { NormalizedIncomingMessage } from '../command-router/dispatch.js';
+import type { CommandResult } from '../types/command.js';
+import { logger } from '../shared/logger.js';
+
+type ClearAction = NonNullable<CommandResult['clearAction']>;
+
+/**
+ * Executes the actual WhatsApp-side deletion requested by
+ * chat-moderation-service (src/chat-moderation-service) via
+ * CommandResult.clearAction — the only layer with a live Chat/Message
+ * reference. Best-effort: WhatsApp only allows deleting messages the bot
+ * account itself sent (or any message if the bot is a group admin), so
+ * per-message delete failures are logged at debug level and skipped
+ * rather than surfaced as an error to the group.
+ */
+async function applyClearAction(
+  client: Client,
+  msg: NormalizedIncomingMessage,
+  action: ClearAction,
+): Promise<void> {
+  try {
+    const chat = await client.getChatById(msg.chatId);
+
+    if (action.scope === 'all') {
+      await chat.clearMessages();
+      return;
+    }
+
+    const limit = action.scope === 'recent' ? (action.limit ?? 20) : 200;
+    const messages = await chat.fetchMessages({ limit });
+
+    const toDelete = messages.filter((m: Message) => {
+      if (action.scope === 'bot') return m.fromMe;
+      if (action.scope === 'saya') return m.author === action.targetSenderJid || m.from === action.targetSenderJid;
+      return true; // 'recent': any author, most-recent `limit` messages
+    });
+
+    for (const message of toDelete) {
+      try {
+        await message.delete(true);
+      } catch (err) {
+        logger.debug(
+          { err, messageId: message.id?._serialized },
+          'could not delete message (not bot-authored and bot is not a group admin)',
+        );
+      }
+    }
+  } catch (err) {
+    logger.error({ err, chatId: msg.chatId, action }, 'failed to execute clearAction');
+  }
+}
+
+/**
+ * Factories bound to the live Client instance, matching the exact function
+ * shapes DispatchDeps.sendResponse / sendError expect. Kept as factories
+ * (rather than importing a module-level client singleton) so the manager
+ * can wire them up explicitly during the integration pass in index.ts.
+ *
+ * Per PRD: "Response bot selalu berupa pesan baru yang me-reply konteks
+ * sebelumnya" -> every response is a NEW message that quote-replies the
+ * triggering message, never an edit of a previous message.
+ */
+export function createSendResponse(
+  client: Client,
+): (msg: NormalizedIncomingMessage, result: CommandResult) => Promise<{ sentMessageId: string }> {
+  return async (msg, result) => {
+    const options: MessageSendOptions = { quotedMessageId: msg.messageId };
+
+    let sentMessageId: string;
+    if (result.imagePath) {
+      const media = MessageMedia.fromFilePath(result.imagePath);
+      const sent = await client.sendMessage(msg.chatId, media, {
+        ...options,
+        caption: result.text,
+      });
+      sentMessageId = sent.id._serialized;
+    } else {
+      const sent = await client.sendMessage(msg.chatId, result.text, options);
+      sentMessageId = sent.id._serialized;
+    }
+
+    if (result.clearAction) {
+      await applyClearAction(client, msg, result.clearAction);
+    }
+
+    return { sentMessageId };
+  };
+}
+
+export function createSendError(
+  client: Client,
+): (msg: NormalizedIncomingMessage, text: string) => Promise<void> {
+  return async (msg, text) => {
+    const options: MessageSendOptions = { quotedMessageId: msg.messageId };
+    await client.sendMessage(msg.chatId, text, options);
+  };
+}

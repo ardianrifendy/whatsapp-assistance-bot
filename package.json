@@ -1,0 +1,46 @@
+{
+  "name": "bot-stok-whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/persistence/migrate.ts",
+    "db:bootstrap-owner": "tsx src/persistence/bootstrapOwnersCli.ts"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.26.0",
+    "pg": "^8.13.1",
+    "drizzle-orm": "^0.36.4",
+    "zod": "^3.24.1",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0",
+    "luxon": "^3.5.0",
+    "dotenv": "^16.4.7",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2",
+    "drizzle-kit": "^0.28.1",
+    "vitest": "^2.1.8",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/luxon": "^3.4.2",
+    "@types/qrcode-terminal": "^0.12.2",
+    "eslint": "^9.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "prettier": "^3.4.2"
+  }
+}

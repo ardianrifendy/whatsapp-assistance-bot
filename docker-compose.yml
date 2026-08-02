@@ -1,0 +1,20 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - whatsapp_session:/app/.wwebjs_auth
+      - ./assets/help:/app/assets/help
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.HEALTHCHECK_PORT || 3000) + '/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # No public ports needed: the WhatsApp adapter is outbound-only.
+    # Health port stays internal to the compose network.
+
+volumes:
+  whatsapp_session:

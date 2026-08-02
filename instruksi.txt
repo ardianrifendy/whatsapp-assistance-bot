@@ -1,0 +1,110 @@
+INSTRUKSI SETUP MANUAL (SUPABASE & VPS)
+=========================================
+Dokumen ini berisi langkah yang HARUS dilakukan manusia secara manual.
+Claude tidak menjalankan langkah-langkah ini karena memerlukan akun,
+kredensial, atau akses infrastruktur yang tidak tersedia untuk Claude.
+
+Referensi kode terkait: .env.example, docker-compose.yml, Dockerfile,
+migrations/, src/persistence/migrate.ts.
+
+1. SUPABASE PROJECT
+--------------------
+- Buat project baru di https://supabase.com (disarankan region Singapore
+  untuk latensi terbaik ke Indonesia).
+- Simpan password database dengan aman (password manager), akan dipakai
+  di DATABASE_URL.
+- Buka Project Settings > Database, catat DUA connection string:
+  a) Connection pooling (Transaction mode) -> dipakai aplikasi saat runtime
+     (DATABASE_URL di .env produksi).
+  b) Direct connection -> dipakai khusus saat menjalankan migrasi
+     (`npm run db:migrate`), karena migrasi butuh koneksi non-pooled.
+- Buka SQL Editor, jalankan: `CREATE EXTENSION IF NOT EXISTS pgcrypto;`
+  jika belum aktif (migrasi 0001 sudah mencoba mengaktifkannya otomatis,
+  ini hanya verifikasi).
+- Tentukan strategi backup: aktifkan Point-in-Time Recovery (PITR) di
+  Supabase (tier berbayar) ATAU jadwalkan `pg_dump` manual dari VPS via
+  cron. Putuskan salah satu sebelum go-live (Fase 6/8).
+- Setelah migrasi dijalankan pertama kali, jadwalkan uji coba restore
+  dari backup minimal sekali sebelum dianggap Fase 8 selesai.
+
+2. MENJALANKAN MIGRASI DATABASE
+---------------------------------
+- Copy `.env.example` menjadi `.env` di lokal atau VPS.
+- Isi DATABASE_URL dengan connection string DIRECT dari Supabase.
+- Jalankan:
+    npm install
+    npm run db:migrate
+- Verifikasi 11 tabel dan function `process_stock_movement` sudah ada
+  di Supabase Table Editor / SQL Editor.
+
+3. NOMOR WHATSAPP DEDICATED
+------------------------------
+- Siapkan SATU nomor WhatsApp khusus untuk bot (SIM card terpisah),
+  JANGAN memakai nomor pribadi. ini adalah mitigasi risiko yang
+  disebutkan eksplisit di prd.md.
+- Catat nomor ini (format digit saja, tanpa +, tanpa spasi, contoh:
+  628123456789) untuk diisi ke OWNER_WHATSAPP_NUMBER di .env — nomor ini
+  akan otomatis menjadi Owner pertama saat aplikasi start pertama kali.
+  (Jika Owner adalah orang lain yang memegang HP bot, gunakan nomor
+  WhatsApp orang tersebut, bukan nomor SIM bot itu sendiri — nomor SIM
+  di sini adalah nomor yang di-scan QR untuk sesi WhatsApp Web.)
+
+4. PROVISIONING VPS
+----------------------
+- Gunakan Ubuntu 22.04 LTS (direkomendasikan).
+- Install Docker Engine + Docker Compose plugin.
+- Buat user non-root khusus deployment (jangan pakai root untuk
+  menjalankan container).
+- Konfigurasi firewall (`ufw`): izinkan SSH saja; bot tidak perlu port
+  publik apa pun (adapter WhatsApp bersifat outbound-only).
+- Clone/copy source code project ke VPS.
+- Copy `.env.example` -> `.env` di VPS, isi semua secret (DATABASE_URL,
+  OWNER_WHATSAPP_NUMBER, dll). JANGAN pernah commit file `.env` ke git.
+
+5. MENJALANKAN BOT PERTAMA KALI
+-----------------------------------
+- Di VPS, jalankan:
+    docker compose up -d
+    docker compose logs -f bot
+- Scan QR code yang muncul di log memakai nomor WhatsApp dedicated
+  (langkah 3) melalui aplikasi WhatsApp di HP.
+- Setelah login berhasil, tunggu sampai health check container "healthy".
+
+6. VERIFIKASI OPERASIONAL (sebelum Fase 8 dianggap selesai)
+----------------------------------------------------------------
+- Restart container (`docker compose restart`) dan pastikan sesi
+  WhatsApp TIDAK perlu scan ulang QR (memverifikasi volume persisten
+  `whatsapp_session` bekerja).
+- Uji koneksi Supabase dari VPS (bot bisa connect, query berjalan).
+- Uji reconnect: matikan koneksi internet VPS sebentar, pastikan bot
+  reconnect otomatis ke WhatsApp.
+- Lakukan uji restore backup Supabase minimal sekali (lihat poin 1).
+
+7. KEPUTUSAN BISNIS YANG PERLU DIKONFIRMASI
+------------------------------------------------
+- MAX_BATCH_ITEMS di .env di-default ke 50 (jumlah maksimum item per
+  batch transaksi !masuk/!keluar/dll). Jika bisnis menginginkan angka
+  lain, ubah nilai ini di .env sebelum go-live.
+- ENABLE_CLEAR_ALL di-default ke false (`!clear all` dinonaktifkan)
+  sesuai keputusan MVP di prd.md — HANYA aktifkan setelah pengujian
+  keamanan command ini selesai dan disetujui Owner.
+
+8. OPSIONAL
+--------------
+- Pasang monitoring uptime eksternal (mis. UptimeRobot) yang mengecek
+  endpoint `/health` bot (lihat HEALTHCHECK_PORT di .env) agar Owner
+  mendapat notifikasi jika bot down.
+
+9. ASET GAMBAR BANTUAN (WAJIB sebelum Fase 5 terlihat sempurna oleh User)
+------------------------------------------------------------------------
+Folder `assets/help/` sudah dibuat tapi masih kosong. Siapkan 7 file PNG
+berikut (desain visual, bukan kode, jadi dibuat manusia/desainer):
+    assets/help/help-main.png
+    assets/help/help-stock.png
+    assets/help/help-transaction.png
+    assets/help/help-in-transit.png
+    assets/help/help-history.png
+    assets/help/help-admin.png
+    assets/help/help-confirmation.png
+Tanpa file ini, command `!help` tetap berfungsi (teks menu tetap terkirim)
+tapi tanpa gambar panduan visual.
