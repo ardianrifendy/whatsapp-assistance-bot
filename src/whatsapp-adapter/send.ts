@@ -43,11 +43,15 @@ async function applyClearAction(
   action: ClearAction,
 ): Promise<void> {
   try {
+    logger.info({ chatId: msg.chatId, action }, 'clearAction: calling getChatById');
     const chat = await client.getChatById(msg.chatId);
+    logger.info({ chatId: msg.chatId }, 'clearAction: getChatById ok');
 
     if (action.scope === 'all') {
       try {
+        logger.info({ chatId: msg.chatId }, 'clearAction: calling chat.clearMessages');
         await chat.clearMessages();
+        logger.info({ chatId: msg.chatId }, 'clearAction: chat.clearMessages ok');
         return;
       } catch (err) {
         // Observed to fail with an internal WhatsApp Web scraping-layer
@@ -64,7 +68,9 @@ async function applyClearAction(
     }
 
     const limit = action.scope === 'recent' ? (action.limit ?? 20) : 1000;
+    logger.info({ chatId: msg.chatId, limit }, 'clearAction: calling fetchMessages');
     const messages = await chat.fetchMessages({ limit });
+    logger.info({ chatId: msg.chatId, count: messages.length }, 'clearAction: fetchMessages ok');
 
     const toDelete = messages.filter((m: Message) => {
       if (action.scope === 'bot') return m.fromMe;
